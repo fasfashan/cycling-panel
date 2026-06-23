@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, TrendingUp, ShieldCheck, Wrench } from "lucide-react";
+import { Activity, TrendingUp, ShieldCheck, Wrench, ListOrdered } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
 const nav = [
   { href: "/", label: "Overview", icon: Activity },
+  { href: "/activities", label: "Rides", icon: ListOrdered },
   { href: "/trends", label: "Trends", icon: TrendingUp },
   { href: "/planner", label: "Planner", icon: ShieldCheck },
   { href: "/gear", label: "Gear", icon: Wrench },
@@ -22,9 +23,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="mx-auto flex h-14 w-full max-w-5xl items-center justify-between gap-4 px-4">
           <Link href="/" className="flex items-baseline gap-2">
             <span className="font-heading text-base font-semibold tracking-tight">
-              pasabersepeda
+              Pasa Bersepeda
             </span>
-            <span className="label-readout hidden sm:inline">cycling panel</span>
+            
           </Link>
 
           <nav className="flex items-center gap-1">

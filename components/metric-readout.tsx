@@ -24,9 +24,9 @@ type MetricReadoutProps = {
 };
 
 const valueSize = {
-  sm: "text-2xl",
-  md: "text-4xl",
-  lg: "text-5xl",
+  sm: "text-xl sm:text-2xl",
+  md: "text-2xl sm:text-3xl",
+  lg: "text-3xl sm:text-4xl",
 } as const;
 
 export function MetricReadout({
@@ -52,7 +52,7 @@ export function MetricReadout({
       <div className="flex items-baseline gap-1.5">
         <span
           className={cn(
-            "font-mono font-medium leading-none tabular-nums",
+            "font-mono font-medium leading-none tabular-nums whitespace-nowrap",
             valueSize[size],
             accent ? "text-pine" : "text-foreground"
           )}

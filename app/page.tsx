@@ -1,4 +1,5 @@
-import { Bike } from "lucide-react";
+import Link from "next/link";
+import { Bike, ChevronRight } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
 import { MetricReadout } from "@/components/metric-readout";
@@ -10,6 +11,7 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import { getOverviewStats } from "@/lib/stats/overview";
+import { getActivityPhotos, photoUrl } from "@/lib/strava/photos";
 import {
   kmFromMeters,
   kmhFromMs,
@@ -47,6 +49,9 @@ export default async function Home() {
   }
 
   const { totals, rolling7, streakDays, latest, todayIndex } = stats;
+
+  // Fetch photos for the latest ride (size 600 = thumbnail).
+  const latestPhotos = latest ? await getActivityPhotos(latest.id, 600) : [];
 
   const distDir =
     rolling7.distanceDeltaM > 0 ? "up" : rolling7.distanceDeltaM < 0 ? "down" : "flat";
@@ -126,35 +131,70 @@ export default async function Home() {
         {/* Latest ride detail */}
         {latest ? (
           <section>
-            <Card>
-              <CardHeader>
-                <CardTitle>Latest ride</CardTitle>
-                <CardDescription>
-                  {latest.name} · {relativeWhen(latest.startLocal, todayIndex)}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="grid grid-cols-3 gap-4">
-                <MetricReadout
-                  label="Distance"
-                  value={kmFromMeters(latest.distanceM)}
-                  unit="km"
-                  size="md"
-                  accent
-                />
-                <MetricReadout
-                  label="Avg speed"
-                  value={kmhFromMs(latest.avgSpeedMs)}
-                  unit="km/h"
-                  size="md"
-                />
-                <MetricReadout
-                  label="Elevation"
-                  value={metersRounded(latest.elevationGainM)}
-                  unit="m"
-                  size="md"
-                />
-              </CardContent>
-            </Card>
+            <div className="mb-2 flex items-baseline justify-between">
+              <span className="label-readout">Latest ride</span>
+              <Link
+                href="/activities"
+                className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+              >
+                All rides →
+              </Link>
+            </div>
+            <Link href={`/activities/${latest.id}`} className="group block">
+              <Card className="transition-colors group-hover:border-border/80 group-hover:bg-muted/30">
+                <CardHeader>
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <CardTitle>{latest.name}</CardTitle>
+                      <CardDescription>
+                        {relativeWhen(latest.startLocal, todayIndex)}
+                      </CardDescription>
+                    </div>
+                    <ChevronRight className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
+                  </div>
+                </CardHeader>
+                <CardContent className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                  <MetricReadout
+                    label="Distance"
+                    value={kmFromMeters(latest.distanceM)}
+                    unit="km"
+                    size="md"
+                    accent
+                  />
+                  <MetricReadout
+                    label="Avg speed"
+                    value={kmhFromMs(latest.avgSpeedMs)}
+                    unit="km/h"
+                    size="md"
+                  />
+                  <MetricReadout
+                    label="Elevation"
+                    value={metersRounded(latest.elevationGainM)}
+                    unit="m"
+                    size="md"
+                  />
+                </CardContent>
+
+                {latestPhotos.length > 0 ? (
+                  <div className="flex gap-2 overflow-x-auto px-5 pb-5">
+                    {latestPhotos.map((photo) => {
+                      const url = photoUrl(photo);
+                      if (!url) return null;
+                      return (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          key={photo.unique_id}
+                          src={url}
+                          alt={photo.caption || latest.name}
+                          loading="lazy"
+                          className="size-20 shrink-0 rounded-md object-cover sm:size-24"
+                        />
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </Card>
+            </Link>
           </section>
         ) : null}
       </div>
