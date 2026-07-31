@@ -90,6 +90,18 @@ export const syncState = pgTable("sync_state", {
     .defaultNow(),
 });
 
+export const coachBriefs = pgTable("coach_briefs", {
+  id: serial("id").primaryKey(),
+  kind: text("kind").notNull().default("planner"),
+  contextHash: text("context_hash").notNull(),
+  model: text("model").notNull(),
+  promptVersion: text("prompt_version").notNull(),
+  briefJson: jsonb("brief_json").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 export type Activity = typeof activities.$inferSelect;
 export type NewActivity = typeof activities.$inferInsert;
 export type Gear = typeof gear.$inferSelect;
@@ -97,3 +109,5 @@ export type NewGear = typeof gear.$inferInsert;
 export type Maintenance = typeof maintenance.$inferSelect;
 export type NewMaintenance = typeof maintenance.$inferInsert;
 export type SyncState = typeof syncState.$inferSelect;
+export type CoachBrief = typeof coachBriefs.$inferSelect;
+export type NewCoachBrief = typeof coachBriefs.$inferInsert;
