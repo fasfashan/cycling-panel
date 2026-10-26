@@ -246,68 +246,27 @@ Ship 1–4 as the first usable version, then layer 5–7.
 
 ## 14. UI & Visual Design Direction
 
-The goal is a UI that looks intentionally designed, not auto-generated. Use **shadcn/ui**
-for component primitives, but **customize the theme** — default shadcn (zinc/slate +
-Inter + default radius) has itself become a recognizable "template" look. Override the
-tokens, fonts, and radius so the result is ours.
+**Design direction lives in [`DESIGN.md`](DESIGN.md). Read it before any UI work.**
+It is owner-authored and holds identity, character, dials, theme, color tokens,
+typography, language, coaching, and per-screen direction. If anything below
+conflicts with `DESIGN.md`, `DESIGN.md` wins. Do not invent direction for items
+it marks as "Belum diputuskan" — ask the owner.
 
-### Design thesis
-**A cycle-computer instrument panel.** The rider reads his bike computer mid-ride;
-the dashboard should feel like that — precise, data-first, quiet. The *numbers are the
-hero*, not decorative marketing blocks. This is grounded in the subject (a cyclist +
-a tinkerer who likes mechanical precision), so it won't read as a generic minimal theme.
+The antislop skills (`antislop`, `antislop-ui`, etc.) are the filter: read
+`DESIGN.md` for direction, then apply antislop to reject generic AI patterns.
 
-### Token system
+### Implementation notes (still apply)
 
-**Color** (cool, near-monochrome + one restrained accent — derive shadcn CSS vars from these):
-```
-ink     #1A1C1E   /* primary text, near-black (cool, not pure #000) */
-paper   #F4F5F6   /* app background — cool light grey, deliberately NOT cream */
-surface #FFFFFF   /* cards / panels */
-line    #E3E5E8   /* hairlines, borders, dividers */
-muted   #6B7177   /* secondary text, labels */
-accent  #0E5C4A   /* deep pine — used ONLY for active state, current-week data, PR/positive emphasis */
-warn    #B4541E   /* used ONLY for overreach warnings — sparingly */
-```
-Spend boldness in one place: the accent appears on a *few* elements only (active nav,
-the live/this-week value, PR badges). Everything else stays ink/grey/paper.
-
-**Type** (do NOT use Inter — it's the AI/shadcn default):
-- **Display / headings:** `Space Grotesk` — engineered, slightly mechanical character.
-- **Body / UI:** `Hanken Grotesk` — warm, highly readable, not a default grotesque.
-- **Numeric / metrics:** `JetBrains Mono` (or `Geist Mono`) with **tabular figures**
-  (`font-variant-numeric: tabular-nums`). All stats render in mono — this is the signature.
-
-Set a real type scale with intentional weights. Labels are small, uppercase, with
-letter-spacing (instrument-readout feel). Sentence case for everything else.
-
-**Layout & shape:**
-- Generous whitespace, clear grid, strong data hierarchy. The hero is the **current
-  state readout** (this-week / latest-ride metrics), not a gradient banner.
-- Consistent small radius (**6–8px**) — not pill-shaped, not zero (zero = broadsheet AI default).
-- Flat surfaces, hairline borders. Minimal, soft shadows only where elevation is meaningful.
-
-**Signature element:** the **metric readout** — large mono number with tabular figures +
-a small spaced uppercase label, styled like a cycle-computer screen. Reuse this component
-everywhere stats appear so the whole app feels like one instrument.
-
-### Hard "do NOT" list (these read as AI-generated)
-- ❌ The three current AI-default looks: (1) cream `#F4F1EA` + serif display + terracotta
-  accent; (2) near-black bg + single acid-green/vermilion accent; (3) broadsheet hairlines
-  + zero radius + dense newspaper columns.
-- ❌ Purple/violet or blue→purple **gradients**, neon glows, glassmorphism.
-- ❌ Default shadcn theme shipped unchanged; Inter as the only/primary font.
-- ❌ The template hero: one big number + gradient accent + small label.
-- ❌ Emoji used as UI icons (use a real icon set, e.g. `lucide-react`, sized consistently).
-- ❌ Over-animation. Keep motion minimal and purposeful (see below).
-
-### Motion
-Restrained only. Acceptable: a subtle count-up on metric mount, a gentle fade/slide when
-data revalidates, quiet hover states. No parallax, no decorative looping animation.
-Always respect `prefers-reduced-motion`.
+- Use **shadcn/ui** for primitives, but override its tokens, fonts, and radius from
+  `DESIGN.md` — never ship the default shadcn theme.
+- Consistent small radius (**6–8px**). Flat surfaces, hairline borders; shadow only
+  where elevation is meaningful.
+- Use a real icon set, sized consistently. No emoji as UI icons.
+- No purple/violet or blue→purple gradients, neon glows, or glassmorphism.
 
 ### Quality floor (non-negotiable)
+
 - Fully responsive, **mobile-first** (the owner is primarily on mobile).
 - Visible keyboard focus states; proper contrast (WCAG AA).
 - Tabular figures for every number so columns/tables don't jitter.
-- If a dark mode is added, derive it from the same tokens — don't bolt on a second palette.
+- Always respect `prefers-reduced-motion`.
