@@ -1,6 +1,11 @@
 import type { NewActivity, NewGear } from "@/lib/db/schema";
 import type { StravaActivity, StravaGear } from "./types";
 
+function normalizeRpe(value: number | null | undefined): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  return Math.min(10, Math.max(1, Math.round(value)));
+}
+
 /** Map a Strava activity payload to a DB row (raw metric, no unit conversion). */
 export function toActivityRow(a: StravaActivity): NewActivity {
   return {
@@ -20,6 +25,7 @@ export function toActivityRow(a: StravaActivity): NewActivity {
     gearId: a.gear_id ?? null,
     prCount: a.pr_count ?? 0,
     achievementCount: a.achievement_count ?? 0,
+    rpe: normalizeRpe(a.perceived_exertion),
     raw: a,
     updatedAt: new Date(),
   };

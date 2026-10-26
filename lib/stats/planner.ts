@@ -150,17 +150,17 @@ export async function getPlannerData(): Promise<PlannerData> {
     const jump = prevKm > 0 ? (lastKm - prevKm) / prevKm : 0;
     if (jump > 0.3) {
       overreach = "caution";
-      overreachNote = `Last week was ${Math.round(jump * 100)}% more than the week before — your body may still be catching up. Keep this week controlled.`;
+      overreachNote = `Minggu lalu ${Math.round(jump * 100)}% lebih jauh dari minggu sebelumnya. Badan mungkin masih nyesuaiin, jadi minggu ini jaga ritme.`;
     }
   }
 
   // Check current week vs safe target.
   if (safeTargetKm > 0 && currentWeekKm > safeTargetKm * 1.3) {
     overreach = "high";
-    overreachNote = `This week you're already at ${Math.round(currentWeekKm * 10) / 10} km — ${Math.round((currentWeekKm / safeTargetKm - 1) * 100)}% over the safe ceiling of ${safeTargetKm} km. Consider a rest day or a very short spin before adding more volume.`;
+    overreachNote = `Minggu ini udah ${Math.round(currentWeekKm * 10) / 10} km, ${Math.round((currentWeekKm / safeTargetKm - 1) * 100)}% di atas batas aman ${safeTargetKm} km. Ambil hari libur atau putaran pendek dulu sebelum nambah jarak.`;
   } else if (safeTargetKm > 0 && currentWeekKm > safeTargetKm) {
     overreach = "caution";
-    overreachNote = `You've nudged past the safe weekly target (${safeTargetKm} km). You can keep riding — just keep the remaining rides easy and short.`;
+    overreachNote = `Lo udah sedikit lewat batas aman minggu ini (${safeTargetKm} km). Masih boleh gowes, asal sisa ride-nya santai dan pendek.`;
   }
 
   return {

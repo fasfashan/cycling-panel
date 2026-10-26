@@ -127,6 +127,9 @@ so this feature protects against overreach.
 - Suggest **next ride distance** based on recent rolling average.
 - **Overreach warning** when actual or planned volume jumps too far above the safe curve
   (flag injury/burnout risk). Keep tone encouraging, not alarmist.
+- **Coach brief** is deterministic (`lib/coach/rules.ts`): status, next-ride range, and
+  reasons come from planner numbers, days since last ride, and RPE. No LLM — every
+  sentence must trace back to a rule.
 
 ### 5.4 Gear & Maintenance Tracker ⭐⭐ (most personal to this rider)
 - Track **distance per component/bike** (Strava gear exposes total distance per gear).
@@ -138,7 +141,7 @@ so this feature protects against overreach.
 
 ## 6. Out of Scope (Phase 2+) — do NOT build in MVP
 
-- **AI "Ask the Coach"** (Anthropic API: weekly summaries, natural-language Q&A on the data).
+- **Any LLM / AI API** (Gemini was removed). Coaching stays rule-based.
 - Maps / route heatmap from polylines.
 - Weather correlation (Bogor rain context).
 - Goals/milestones gamification + badges.
@@ -152,7 +155,8 @@ Single athlete, so no users table. Suggested tables/keys:
 
 - **activities** — `id` (Strava activity id, PK), `name`, `sport_type`, `start_local`,
   `distance_m`, `moving_time_s`, `elapsed_time_s`, `elevation_gain_m`, `avg_speed_ms`,
-  `max_speed_ms`, `gear_id`, `pr_count`, `achievement_count`, raw JSON blob.
+  `max_speed_ms`, `gear_id`, `pr_count`, `achievement_count`, `rpe` (1–10, nullable),
+  raw JSON blob.
 - **gear** — `id` (Strava gear id, PK), `name`, `type`, `total_distance_m`, `retired`.
 - **maintenance** — `id`, `gear_id`, `task`, `interval_km`, `last_done_distance_m`, `notes`.
 - **sync_state** — last sync cursor/time, cached access token + `expires_at`.
@@ -172,6 +176,14 @@ Strava returns **metric**: distance in **meters**, speed in **m/s**.
 - km = `distance_m / 1000`
 - km/h = `avg_speed_ms * 3.6`
 Convert at the display layer; store raw metric values.
+
+### Perceived Exertion (RPE)
+- `perceived_exertion` (1–10) is **undocumented** and only present on the **detail**
+  endpoint, never on the list endpoint. Stored as `activities.rpe`.
+- List syncs must not overwrite `raw` or `rpe`: `upsertActivities(rows, "summary")`
+  merges raw JSON and leaves `rpe` alone; only `"detail"` replaces them.
+- Strava sends no webhook when only RPE is edited, so each sync re-fetches the detail
+  of recent rides with empty RPE (and rows missing a detail payload), capped per run.
 
 ### No HR / power / cadence
 Those fields will be **null/absent**. Do **not** build features that depend on
@@ -202,6 +214,7 @@ STRAVA_CLIENT_SECRET=        # server-only, never exposed to client
 STRAVA_REFRESH_TOKEN=        # owner's long-lived refresh token
 STRAVA_WEBHOOK_VERIFY_TOKEN= # arbitrary string for the webhook handshake
 DATABASE_URL=                # Neon Postgres (or Upstash Redis URL)
+SYNC_SECRET=                 # protects /api/strava/sync (cron + manual calls)
 ```
 
 ---

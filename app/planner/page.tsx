@@ -1,4 +1,4 @@
-import { AlertTriangle, ShieldCheck } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
 import { CoachBriefCard } from "@/components/planner/coach-brief-card";
@@ -9,37 +9,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { getLatestPlannerCoachBrief } from "@/lib/stats/coach-brief";
+import { getCoachBrief } from "@/lib/coach/rules";
 import { getPlannerData } from "@/lib/stats/planner";
-import type { OverreachLevel } from "@/lib/stats/planner";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
-
-function OverreachBanner({
-  level,
-  note,
-}: {
-  level: OverreachLevel;
-  note: string;
-}) {
-  if (level === "none") return null;
-
-  const isHigh = level === "high";
-  return (
-    <div
-      className={cn(
-        "flex gap-3 rounded-lg border p-4 text-sm",
-        isHigh
-          ? "border-warn/30 bg-warn/8 text-warn"
-          : "border-amber-300/40 bg-amber-50 text-amber-800"
-      )}
-    >
-      <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
-      <p>{note}</p>
-    </div>
-  );
-}
 
 function WeekRow({
   label,
@@ -62,7 +36,7 @@ function WeekRow({
         isCurrentWeek && "bg-muted/60"
       )}
     >
-      <span className="w-16 label-readout">{label}</span>
+      <span className="w-16 text-xs text-muted-foreground">{label}</span>
       <div className="flex-1">
         <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
           <div
@@ -85,14 +59,14 @@ function WeekRow({
       </div>
       <span
         className={cn(
-          "w-16 text-right font-mono text-xs tabular-nums",
+          "w-16 text-right text-xs tabular-nums",
           isCurrentWeek ? "font-medium text-foreground" : "text-muted-foreground",
           over && !isCurrentWeek && "text-warn/70"
         )}
       >
         {distanceKm} km
       </span>
-      <span className="w-12 text-right font-mono text-xs tabular-nums text-muted-foreground">
+      <span className="w-12 text-right text-xs tabular-nums text-muted-foreground">
         {rides}x
       </span>
     </div>
@@ -100,20 +74,17 @@ function WeekRow({
 }
 
 export default async function PlannerPage() {
-  const [data, latestCoachBrief] = await Promise.all([
-    getPlannerData(),
-    getLatestPlannerCoachBrief(),
-  ]);
+  const [data, brief] = await Promise.all([getPlannerData(), getCoachBrief()]);
 
-  if (!data.hasData) {
+  if (!data.hasData || !brief) {
     return (
       <AppShell>
         <Card>
           <CardContent className="flex flex-col items-center gap-3 py-16 text-center">
             <ShieldCheck className="size-8 text-muted-foreground" aria-hidden />
-            <p className="font-heading text-lg">No ride data yet</p>
+            <p className="font-heading text-lg">Belum ada data ride</p>
             <p className="max-w-sm text-sm text-muted-foreground">
-              Complete a few rides and sync - your safe ride plan shows up here.
+              Gowes beberapa kali dan tunggu sync dari Strava. Saran ride lo muncul di sini.
             </p>
           </CardContent>
         </Card>
@@ -121,42 +92,27 @@ export default async function PlannerPage() {
     );
   }
 
-  const { recentWeeks, safeTargetKm, overreach, overreachNote } = data;
+  const { recentWeeks, safeTargetKm } = data;
 
   return (
     <AppShell>
       <div className="flex flex-col gap-6">
         <div>
           <h1 className="font-heading text-xl font-semibold tracking-tight">
-            Safe Ride Planner
+            Rencana ride
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            10% weekly volume rule - steady progress, low injury risk.
+            Naik maksimal 10% per minggu biar progres jalan dan risiko cedera kecil.
           </p>
         </div>
 
-        {overreach !== "none" && overreachNote ? (
-          <OverreachBanner level={overreach} note={overreachNote} />
-        ) : null}
-
-        <CoachBriefCard
-          initialBrief={
-            latestCoachBrief
-              ? {
-                  id: latestCoachBrief.id,
-                  model: latestCoachBrief.model,
-                  brief: latestCoachBrief.brief,
-                  createdAt: latestCoachBrief.createdAt.toISOString(),
-                }
-              : null
-          }
-        />
+        <CoachBriefCard brief={brief} />
 
         <Card>
           <CardHeader>
-            <CardTitle>Recent weeks</CardTitle>
+            <CardTitle>Minggu-minggu terakhir</CardTitle>
             <CardDescription>
-              Safe ceiling this week is {safeTargetKm} km
+              Batas aman minggu ini {safeTargetKm} km
             </CardDescription>
           </CardHeader>
           <CardContent className="-mx-1 flex flex-col gap-0.5">

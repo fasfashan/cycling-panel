@@ -36,10 +36,4 @@ export const env = {
   get syncSecret() {
     return required("SYNC_SECRET");
   },
-  get geminiApiKey() {
-    return required("GEMINI_API_KEY");
-  },
-  get geminiModel() {
-    return process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
-  },
 };

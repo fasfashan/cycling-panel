@@ -29,6 +29,11 @@ export type StravaActivity = {
   gear_id: string | null;
   pr_count?: number;
   achievement_count?: number;
+  // Detail endpoint only (GET /activities/{id}); absent from list payloads.
+  // Undocumented: the rider's Perceived Exertion, 1–10, null when not set.
+  perceived_exertion?: number | null;
+  prefer_perceived_exertion?: boolean | null;
+  description?: string | null;
 };
 
 export type StravaGear = {
