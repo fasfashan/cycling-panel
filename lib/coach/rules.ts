@@ -3,9 +3,11 @@ import { asc } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { activities } from "@/lib/db/schema";
 import type { Activity } from "@/lib/db/schema";
-import { localDayIndex } from "@/lib/format";
-import { getPlannerData } from "@/lib/stats/planner";
+import { fmtNum, localDayIndex } from "@/lib/format";
+import { getPlannerData, todayIndex } from "@/lib/stats/planner";
 import type { PlannerData } from "@/lib/stats/planner";
+import { speedTrend } from "@/lib/stats/speed";
+import type { SpeedTrend } from "@/lib/stats/speed";
 
 /**
  * Deterministic coach: turns planner numbers + recent rides into a brief.
@@ -13,9 +15,6 @@ import type { PlannerData } from "@/lib/stats/planner";
  * current and each call can be traced back to the data that triggered it.
  */
 
-const RIDER_TZ_OFFSET_MS = 7 * 60 * 60 * 1000;
-/** Rides under this distance are errands and don't shape the plan. */
-const MEANINGFUL_RIDE_M = 3000;
 const HARD_RPE = 8;
 const VERY_HARD_RPE = 9;
 const EASY_RPE = 5;
@@ -42,33 +41,20 @@ export type CoachBrief = {
   watchouts: string[];
 };
 
-type RideFacts = {
+export type RideFacts = {
   daysSinceLastRide: number | null;
   lastRide: Activity | null;
   lastRideRpe: number | null;
   recentRpeAvg: number | null;
-  speedDeltaKmh: number | null;
+  speed: SpeedTrend | null;
 };
 
 function isRide(sportType: string): boolean {
   return /ride/i.test(sportType);
 }
 
-function todayIndex(): number {
-  return localDayIndex(new Date(Date.now() + RIDER_TZ_OFFSET_MS));
-}
-
 function round1(n: number): number {
   return Math.round(n * 10) / 10;
-}
-
-function median(nums: number[]): number {
-  if (nums.length === 0) return 0;
-  const sorted = [...nums].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 0
-    ? (sorted[mid - 1] + sorted[mid]) / 2
-    : sorted[mid];
 }
 
 function rideRange(centerKm: number, capKm: number | null): string {
@@ -91,18 +77,12 @@ function rideFacts(rides: Activity[]): RideFacts {
       ? round1(rated.reduce((sum, a) => sum + (a.rpe ?? 0), 0) / rated.length)
       : null;
 
-  const meaningful = rides.filter((a) => a.distanceM >= MEANINGFUL_RIDE_M);
-  const recentSpeed = median(meaningful.slice(-3).map((a) => a.avgSpeedMs * 3.6));
-  const prevSpeed = median(meaningful.slice(-6, -3).map((a) => a.avgSpeedMs * 3.6));
-  const speedDeltaKmh =
-    meaningful.length >= 6 ? round1(recentSpeed - prevSpeed) : null;
-
   return {
     daysSinceLastRide,
     lastRide,
     lastRideRpe: lastRide?.rpe ?? null,
     recentRpeAvg,
-    speedDeltaKmh,
+    speed: speedTrend(rides),
   };
 }
 
@@ -165,7 +145,7 @@ export function buildCoachBrief(planner: PlannerData, facts: RideFacts): CoachBr
     headline = "Badan butuh jeda dulu";
     coachNote = hardLastRide
       ? `Ride terakhir lo nilai ${lastRpe}/10. Kasih waktu pulih sebelum nambah jarak lagi.`
-      : `Minggu ini udah ${planner.currentWeekKm} km, jauh di atas batas aman ${planner.safeTargetKm} km. Rehat sekarang biar minggu depan tetap bisa jalan.`;
+      : `Minggu ini udah ${fmtNum(planner.currentWeekKm)} km, jauh di atas batas aman ${fmtNum(planner.safeTargetKm)} km. Rehat sekarang biar minggu depan tetap bisa jalan.`;
     primaryFocus = "Pemulihan";
   } else if (hardLastRide) {
     headline = "Ride kemarin berat, hari ini santai";
@@ -185,10 +165,10 @@ export function buildCoachBrief(planner: PlannerData, facts: RideFacts): CoachBr
     primaryFocus = "Konsistensi";
   } else if (!budgetLeft) {
     headline = "Target minggu ini udah kelar";
-    coachNote = `Lo udah gowes ${planner.currentWeekKm} km dari batas aman ${planner.safeTargetKm} km. Sisa minggu ini buat pulih.`;
+    coachNote = `Lo udah gowes ${fmtNum(planner.currentWeekKm)} km dari batas aman ${fmtNum(planner.safeTargetKm)} km. Sisa minggu ini buat pulih.`;
     primaryFocus = "Pemulihan";
   } else {
-    headline = `Masih ada jatah ${round1(planner.remainingKm)} km minggu ini`;
+    headline = `Masih ada jatah ${fmtNum(planner.remainingKm)} km minggu ini`;
     coachNote = "Ritme lo udah pas. Pakai sisa jatah buat satu atau dua ride santai.";
     primaryFocus = "Konsistensi";
   }
@@ -197,7 +177,7 @@ export function buildCoachBrief(planner: PlannerData, facts: RideFacts): CoachBr
   const observations: string[] = [];
   if (planner.safeTargetKm > 0) {
     observations.push(
-      `Minggu ini ${planner.currentWeekKm} km dari batas aman ${planner.safeTargetKm} km.`
+      `Minggu ini ${fmtNum(planner.currentWeekKm)} km dari batas aman ${fmtNum(planner.safeTargetKm)} km.`
     );
   }
   if (facts.daysSinceLastRide !== null) {
@@ -212,11 +192,12 @@ export function buildCoachBrief(planner: PlannerData, facts: RideFacts): CoachBr
   if (lastRpe !== null) {
     observations.push(`RPE ride terakhir ${lastRpe}/10.`);
   }
-  if (facts.speedDeltaKmh !== null && Math.abs(facts.speedDeltaKmh) >= 0.5) {
+  const speedDelta = facts.speed?.deltaKmh ?? 0;
+  if (Math.abs(speedDelta) >= 0.5) {
     observations.push(
-      facts.speedDeltaKmh > 0
-        ? `Kecepatan rata-rata naik ${facts.speedDeltaKmh} km/j dibanding 3 ride sebelumnya.`
-        : `Kecepatan rata-rata turun ${Math.abs(facts.speedDeltaKmh)} km/j dibanding 3 ride sebelumnya.`
+      speedDelta > 0
+        ? `Kecepatan rata-rata naik ${fmtNum(speedDelta)} km/j dibanding 5 ride sebelumnya.`
+        : `Kecepatan rata-rata turun ${fmtNum(Math.abs(speedDelta))} km/j dibanding 5 ride sebelumnya.`
     );
   }
 
@@ -224,7 +205,7 @@ export function buildCoachBrief(planner: PlannerData, facts: RideFacts): CoachBr
   const why: string[] = [];
   if (planner.hasBaseline) {
     why.push(
-      `Batas aman = minggu lalu ${planner.baselineKm} km + 10%. Naik pelan menurunkan risiko cedera.`
+      `Batas aman = minggu lalu ${fmtNum(planner.baselineKm)} km + 10%. Naik pelan menurunkan risiko cedera.`
     );
   }
   if (hardLastRide) {
@@ -261,8 +242,14 @@ export function buildCoachBrief(planner: PlannerData, facts: RideFacts): CoachBr
   };
 }
 
+export type TodayData = {
+  brief: CoachBrief;
+  planner: PlannerData;
+  facts: RideFacts;
+};
+
 /** Load planner + rides from the DB and build today's brief. */
-export async function getCoachBrief(): Promise<CoachBrief | null> {
+export async function getToday(): Promise<TodayData | null> {
   const db = getDb();
   const [planner, rows] = await Promise.all([
     getPlannerData(),
@@ -271,5 +258,6 @@ export async function getCoachBrief(): Promise<CoachBrief | null> {
   if (!planner.hasData) return null;
 
   const rides = (rows as Activity[]).filter((a) => isRide(a.sportType));
-  return buildCoachBrief(planner, rideFacts(rides));
+  const facts = rideFacts(rides);
+  return { brief: buildCoachBrief(planner, facts), planner, facts };
 }

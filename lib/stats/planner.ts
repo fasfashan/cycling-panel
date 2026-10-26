@@ -3,43 +3,43 @@ import { asc } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { activities } from "@/lib/db/schema";
 import type { Activity } from "@/lib/db/schema";
-import { localDayIndex } from "@/lib/format";
+import { fmtNum, localDayIndex } from "@/lib/format";
 
 const RIDER_TZ_OFFSET_MS = 7 * 60 * 60 * 1000;
+/** A week-over-week jump above this is flagged as overreach (and drawn red). */
+export const JUMP_WARN = 0.3;
 
 function isRide(sportType: string): boolean {
   return /ride/i.test(sportType);
 }
 
-function mondayOf(dayIndex: number): number {
+export function mondayOf(dayIndex: number): number {
   const dow = new Date(dayIndex * 86_400_000).getUTCDay();
   return dayIndex - ((dow + 6) % 7);
 }
 
-function todayIndex(): number {
+export function todayIndex(): number {
   return localDayIndex(new Date(Date.now() + RIDER_TZ_OFFSET_MS));
 }
 
-function weekLabel(mondayDayIndex: number): string {
-  return new Date(mondayDayIndex * 86_400_000).toLocaleDateString("en-GB", {
-    timeZone: "UTC",
-    day: "2-digit",
-    month: "short",
-  });
-}
-
-export type WeekSummary = {
-  label: string; // "Mon 16 Jun"
+export type WeekPoint = {
+  /** Day index of the week's Monday. */
+  monday: number;
   distanceKm: number;
   rides: number;
   isCurrentWeek: boolean;
+  /** Previous week + 10%; null when the previous week had no riding. */
+  ceilingKm: number | null;
+  /** Change vs previous week (0.66 = +66%); null for the current week or after an empty week. */
+  jump: number | null;
 };
 
 export type OverreachLevel = "none" | "caution" | "high";
 
 export type PlannerData = {
   hasData: boolean;
-  recentWeeks: WeekSummary[];
+  /** Every week from the first ride to this week, empty weeks included. */
+  weeks: WeekPoint[];
   /** The completed week we apply the 10% rule to. */
   baselineKm: number;
   /** baselineKm × 1.10 — the ceiling we're aiming to stay under. */
@@ -53,9 +53,15 @@ export type PlannerData = {
   overreach: OverreachLevel;
   /** Human-readable note about overreach (null when level is "none"). */
   overreachNote: string | null;
+  /** Last completed week vs the one before it. */
+  lastWeekJump: { previousKm: number; lastKm: number; jump: number } | null;
   /** True when we have enough history to make a meaningful suggestion. */
   hasBaseline: boolean;
 };
+
+function round1(n: number): number {
+  return Math.round(n * 10) / 10;
+}
 
 function median(nums: number[]): number {
   if (nums.length === 0) return 0;
@@ -66,6 +72,33 @@ function median(nums: number[]): number {
     : sorted[mid];
 }
 
+function weekSeries(rides: Activity[], thisWeekMonday: number): WeekPoint[] {
+  const totals = new Map<number, { km: number; rides: number }>();
+  for (const a of rides) {
+    const mon = mondayOf(localDayIndex(a.startLocal));
+    const prev = totals.get(mon) ?? { km: 0, rides: 0 };
+    totals.set(mon, { km: prev.km + a.distanceM / 1000, rides: prev.rides + 1 });
+  }
+
+  const first = mondayOf(localDayIndex(rides[0].startLocal));
+  const weeks: WeekPoint[] = [];
+  for (let mon = first; mon <= thisWeekMonday; mon += 7) {
+    const t = totals.get(mon);
+    const prevKm = weeks.at(-1)?.distanceKm ?? 0;
+    const isCurrentWeek = mon === thisWeekMonday;
+    const km = round1(t?.km ?? 0);
+    weeks.push({
+      monday: mon,
+      distanceKm: km,
+      rides: t?.rides ?? 0,
+      isCurrentWeek,
+      ceilingKm: prevKm > 0 ? round1(prevKm * 1.1) : null,
+      jump: !isCurrentWeek && prevKm > 0 ? km / prevKm - 1 : null,
+    });
+  }
+  return weeks;
+}
+
 export async function getPlannerData(): Promise<PlannerData> {
   const db = getDb();
   const rows = (await db
@@ -74,53 +107,30 @@ export async function getPlannerData(): Promise<PlannerData> {
     .orderBy(asc(activities.startDate))) as Activity[];
 
   const rides = rows.filter((a) => isRide(a.sportType));
+  if (rides.length === 0) return empty();
 
   const today = todayIndex();
   const thisWeekMonday = mondayOf(today);
+  const weeks = weekSeries(rides, thisWeekMonday);
+  const currentWeekKm = weeks.at(-1)?.distanceKm ?? 0;
 
-  if (rides.length === 0) {
-    return empty(today, thisWeekMonday);
-  }
+  // ── Baseline: last COMPLETED week with riding ─────────────────────────
+  // A week off doesn't zero the ceiling; we fall back to the last week ridden.
+  const completed = weeks.filter((w) => !w.isCurrentWeek);
+  const ridden = completed.filter((w) => w.rides > 0);
+  const hasBaseline = ridden.length > 0;
 
-  // ── Bucket rides into weeks ──────────────────────────────────────────
-  const weekMap = new Map<number, { distanceKm: number; rides: number }>();
-  for (const a of rides) {
-    const mon = mondayOf(localDayIndex(a.startLocal));
-    const prev = weekMap.get(mon) ?? { distanceKm: 0, rides: 0 };
-    weekMap.set(mon, {
-      distanceKm: prev.distanceKm + a.distanceM / 1000,
-      rides: prev.rides + 1,
-    });
-  }
-
-  const sortedWeeks = [...weekMap.entries()].sort((a, b) => a[0] - b[0]);
-
-  // Recent 6 weeks for display (include current partial week).
-  const recentWeeks: WeekSummary[] = sortedWeeks.slice(-6).map(([mon, v]) => ({
-    label: weekLabel(mon),
-    distanceKm: Math.round(v.distanceKm * 10) / 10,
-    rides: v.rides,
-    isCurrentWeek: mon === thisWeekMonday,
-  }));
-
-  const currentWeekKm = weekMap.get(thisWeekMonday)?.distanceKm ?? 0;
-
-  // ── Baseline: last COMPLETED week before this one ────────────────────
-  const completedWeeks = sortedWeeks.filter(([mon]) => mon < thisWeekMonday);
-  const hasBaseline = completedWeeks.length > 0;
-
-  let baselineKm = 0;
+  let baselineKm: number;
   if (hasBaseline) {
-    // Use the most recent completed week.
-    baselineKm = completedWeeks[completedWeeks.length - 1][1].distanceKm;
+    baselineKm = ridden[ridden.length - 1].distanceKm;
   } else {
     // No complete week yet — treat current week pace as baseline.
     const daysElapsed = Math.max(1, today - thisWeekMonday + 1);
     baselineKm = (currentWeekKm / daysElapsed) * 7;
   }
-  baselineKm = Math.round(baselineKm * 10) / 10;
+  baselineKm = round1(baselineKm);
 
-  const safeTargetKm = Math.round(baselineKm * 1.1 * 10) / 10;
+  const safeTargetKm = round1(baselineKm * 1.1);
   const remainingKm = Math.max(0, safeTargetKm - currentWeekKm);
 
   // ── Suggested next ride ──────────────────────────────────────────────
@@ -140,50 +150,49 @@ export async function getPlannerData(): Promise<PlannerData> {
   // ── Overreach detection ──────────────────────────────────────────────
   let overreach: OverreachLevel = "none";
   let overreachNote: string | null = null;
+  let lastWeekJump: PlannerData["lastWeekJump"] = null;
 
-  // Check if last completed week itself was already an aggressive jump.
-  if (completedWeeks.length >= 2) {
-    const prevKm =
-      completedWeeks[completedWeeks.length - 2][1].distanceKm;
-    const lastKm =
-      completedWeeks[completedWeeks.length - 1][1].distanceKm;
-    const jump = prevKm > 0 ? (lastKm - prevKm) / prevKm : 0;
-    if (jump > 0.3) {
-      overreach = "caution";
-      overreachNote = `Minggu lalu ${Math.round(jump * 100)}% lebih jauh dari minggu sebelumnya. Badan mungkin masih nyesuaiin, jadi minggu ini jaga ritme.`;
+  if (completed.length >= 2) {
+    const previousKm = completed[completed.length - 2].distanceKm;
+    const lastKm = completed[completed.length - 1].distanceKm;
+    if (previousKm > 0) {
+      const jump = lastKm / previousKm - 1;
+      lastWeekJump = { previousKm, lastKm, jump };
+      if (jump > JUMP_WARN) {
+        overreach = "caution";
+        overreachNote = `Minggu lalu ${Math.round(jump * 100)}% lebih jauh dari minggu sebelumnya. Badan mungkin masih nyesuaiin, jadi minggu ini jaga ritme.`;
+      }
     }
   }
 
-  // Check current week vs safe target.
   if (safeTargetKm > 0 && currentWeekKm > safeTargetKm * 1.3) {
     overreach = "high";
-    overreachNote = `Minggu ini udah ${Math.round(currentWeekKm * 10) / 10} km, ${Math.round((currentWeekKm / safeTargetKm - 1) * 100)}% di atas batas aman ${safeTargetKm} km. Ambil hari libur atau putaran pendek dulu sebelum nambah jarak.`;
+    overreachNote = `Minggu ini udah ${fmtNum(currentWeekKm)} km, ${Math.round((currentWeekKm / safeTargetKm - 1) * 100)}% di atas batas aman ${fmtNum(safeTargetKm)} km. Ambil hari libur atau putaran pendek dulu sebelum nambah jarak.`;
   } else if (safeTargetKm > 0 && currentWeekKm > safeTargetKm) {
     overreach = "caution";
-    overreachNote = `Lo udah sedikit lewat batas aman minggu ini (${safeTargetKm} km). Masih boleh gowes, asal sisa ride-nya santai dan pendek.`;
+    overreachNote = `Lo udah sedikit lewat batas aman minggu ini (${fmtNum(safeTargetKm)} km). Masih boleh gowes, asal sisa ride-nya santai dan pendek.`;
   }
 
   return {
     hasData: true,
     hasBaseline,
-    recentWeeks,
+    weeks,
     baselineKm,
     safeTargetKm,
-    currentWeekKm: Math.round(currentWeekKm * 10) / 10,
-    remainingKm: Math.round(remainingKm * 10) / 10,
+    currentWeekKm,
+    remainingKm: round1(remainingKm),
     suggestedNextRideKm,
     overreach,
     overreachNote,
+    lastWeekJump,
   };
 }
 
-function empty(today: number, thisWeekMonday: number): PlannerData {
-  void today;
-  void thisWeekMonday;
+function empty(): PlannerData {
   return {
     hasData: false,
     hasBaseline: false,
-    recentWeeks: [],
+    weeks: [],
     baselineKm: 0,
     safeTargetKm: 0,
     currentWeekKm: 0,
@@ -191,5 +200,6 @@ function empty(today: number, thisWeekMonday: number): PlannerData {
     suggestedNextRideKm: 0,
     overreach: "none",
     overreachNote: null,
+    lastWeekJump: null,
   };
 }

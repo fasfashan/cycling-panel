@@ -1,23 +1,23 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Space_Grotesk, Hanken_Grotesk, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 
-// Body / UI — warm, highly readable grotesque
+// Body / UI: warm, highly readable grotesque
 const hankenGrotesk = Hanken_Grotesk({
   subsets: ["latin"],
   variable: "--font-sans",
   display: "swap",
 });
 
-// Display / headings — engineered, slightly mechanical
+// Display / headings: engineered, slightly mechanical (fits a bike tinkerer)
 const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
   variable: "--font-heading",
   display: "swap",
 });
 
-// Numeric / metrics — the signature, always tabular figures
+// Hero numbers only (DESIGN.md), always tabular figures
 const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
   variable: "--font-mono",
@@ -25,9 +25,14 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "pasabersepeda — cycling dashboard",
+  title: "Pasa Bersepeda",
   description:
-    "Personal cycling instrument panel — rides, progression, and bike maintenance, auto-updated from Strava.",
+    "Panel gowes pribadi: saran ride berikutnya, progres, dan perawatan sepeda, otomatis dari Strava.",
+};
+
+export const viewport: Viewport = {
+  themeColor: "#121212",
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -37,7 +42,7 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
+      lang="id"
       className={cn(
         "h-full antialiased",
         hankenGrotesk.variable,
@@ -45,7 +50,7 @@ export default function RootLayout({
         jetbrainsMono.variable
       )}
     >
-      <body className="min-h-full flex flex-col font-sans">{children}</body>
+      <body className="min-h-full font-sans">{children}</body>
     </html>
   );
 }

@@ -1,41 +1,55 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { CheckCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { cn } from "@/lib/utils";
 
-export function MarkDoneButton({ taskId }: { taskId: number }) {
-  const [done, setDone] = useState(false);
+/** Records a task as done at the bike's current odometer, then refreshes. */
+export function MarkDoneButton({ taskId, label }: { taskId: number; label: string }) {
+  const [state, setState] = useState<"idle" | "saving" | "done" | "error">("idle");
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
 
   async function handleClick() {
-    setDone(true);
-    await fetch("/api/gear/done", {
+    setState("saving");
+    const res = await fetch("/api/gear/done", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ taskId }),
-    });
+    }).catch(() => null);
+    if (!res?.ok) {
+      setState("error");
+      return;
+    }
+    setState("done");
     startTransition(() => router.refresh());
   }
 
+  const busy = state === "saving" || isPending;
+
   return (
-    <button
-      onClick={handleClick}
-      disabled={isPending || done}
-      className={cn(
-        "flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        done
-          ? "bg-pine/10 text-pine cursor-default"
-          : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground",
-        isPending && "opacity-50"
-      )}
-    >
-      <CheckCheck className="size-3" aria-hidden />
-      {done ? "Done!" : "Mark done"}
-    </button>
+    <div className="mt-3">
+      <button
+        type="button"
+        onClick={handleClick}
+        disabled={busy || state === "done"}
+        className={cn(
+          "h-11 w-full rounded-md border text-sm font-medium",
+          state === "done" ? "border-ok/40 text-ok" : "border-line hover:bg-raised",
+          busy && "opacity-60"
+        )}
+      >
+        {state === "done" ? "Tercatat" : busy ? "Nyimpen…" : "Tandai udah dikerjain"}
+      </button>
+      <p role="status" className="sr-only">
+        {state === "done" ? `${label} dicatat di odometer sekarang` : ""}
+      </p>
+      {state === "error" ? (
+        <p role="alert" className="mt-2 text-xs text-rest">
+          Gagal nyimpen. Cek koneksi, terus coba lagi.
+        </p>
+      ) : null}
+    </div>
   );
 }

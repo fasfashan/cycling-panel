@@ -1,176 +1,171 @@
-import { TrendingUp, Zap, Mountain, Trophy } from "lucide-react";
+import Link from "next/link";
 
 import { AppShell } from "@/components/app-shell";
-import { MetricReadout } from "@/components/metric-readout";
+import { EmptyState, SectionTitle, WeekChart } from "@/components/panel";
+import type { Activity } from "@/lib/db/schema";
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
-import {
-  WeeklyDistanceChart,
-  SpeedProgressionChart,
-  CumulativeElevationChart,
-} from "@/components/charts/trend-charts";
-import { getTrendsData } from "@/lib/stats/trends";
-import { kmFromMeters, kmhFromMs, metersRounded } from "@/lib/format";
+  durationFromSeconds,
+  fmtNum,
+  kmFromMeters,
+  kmhFromMs,
+  localDateLabel,
+  metersRounded,
+} from "@/lib/format";
+import { getPlannerData } from "@/lib/stats/planner";
+import { getProgressData } from "@/lib/stats/trends";
+import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
-export default async function TrendsPage() {
-  const { weeklyDistance, speedProgression, cumulativeElevation, prs } =
-    await getTrendsData();
+function RecordRow({ label, ride, value, unit }: { label: string; ride: Activity; value: string; unit: string }) {
+  return (
+    <Link
+      href={`/activities/${ride.id}`}
+      className="flex w-full items-center justify-between gap-3 border-b border-line py-3.5 last:border-0"
+    >
+      <span className="min-w-0">
+        <span className="block text-xs text-muted-foreground">{label}</span>
+        <span className="block truncate text-sm">
+          {ride.name} · {localDateLabel(ride.startLocal)}
+        </span>
+      </span>
+      <span className="shrink-0 font-heading text-xl font-semibold tabular-nums">
+        {value}
+        <span className="ml-0.5 text-xs font-normal text-muted-foreground">{unit}</span>
+      </span>
+    </Link>
+  );
+}
 
-  const { longestRide, fastestRide, biggestClimb } = prs;
+function SpeedChart({ points, avgKmh }: { points: Activity[]; avgKmh: number }) {
+  const W = 360;
+  const H = 120;
+  const speeds = points.map((p) => p.avgSpeedMs * 3.6);
+  const lo = Math.floor(Math.min(...speeds) - 1);
+  const hi = Math.ceil(Math.max(...speeds) + 1);
+  const y = (v: number) => H - ((v - lo) / (hi - lo)) * (H - 16) - 8;
+  const xy = speeds.map((s, i) => [(i / Math.max(1, speeds.length - 1)) * (W - 16) + 8, y(s)]);
+
+  return (
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      className="h-auto w-full"
+      role="img"
+      aria-label={`Kecepatan rata-rata per ride, ${points.length} ride terakhir, rata-rata ${fmtNum(avgKmh)} km/j`}
+    >
+      <line x1="0" x2={W} y1={y(avgKmh)} y2={y(avgKmh)} stroke="var(--line)" strokeDasharray="4 4" strokeWidth="1.5" />
+      <polyline
+        fill="none"
+        stroke="var(--brand)"
+        strokeWidth="2"
+        strokeLinejoin="round"
+        points={xy.map((p) => p.join(",")).join(" ")}
+      />
+      {xy.map(([cx, cy], i) => {
+        const last = i === xy.length - 1;
+        return (
+          <circle
+            key={points[i].id}
+            cx={cx}
+            cy={cy}
+            r={last ? 4 : 2.5}
+            fill={last ? "var(--brand)" : "var(--surface)"}
+            stroke="var(--brand)"
+            strokeWidth="1.5"
+          />
+        );
+      })}
+    </svg>
+  );
+}
+
+export default async function ProgressPage() {
+  const [data, planner] = await Promise.all([getProgressData(), getPlannerData()]);
+
+  if (!data.hasData || !data.firstRide) {
+    return (
+      <AppShell>
+        <EmptyState title="Belum ada progres" body="Butuh minimal satu ride buat mulai ngitung progres." />
+      </AppShell>
+    );
+  }
+
+  const { totals, prs, speedPoints, speed } = data;
+  const avgKmh = speedPoints.reduce((s, p) => s + p.avgSpeedMs * 3.6, 0) / Math.max(1, speedPoints.length);
 
   return (
     <AppShell>
-      <div className="flex flex-col gap-6">
-        <h1 className="font-heading text-xl font-semibold tracking-tight">
-          Progression & Trends
-        </h1>
+      <h1 className="text-[28px] font-bold tracking-tight">Progres</h1>
+      <p className="text-sm text-muted-foreground">Sejak ride pertama, {localDateLabel(data.firstRide.startLocal)}</p>
 
-        {/* Weekly distance */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <TrendingUp className="size-4 text-pine" aria-hidden />
-              <CardTitle>Weekly distance</CardTitle>
-            </div>
-            <CardDescription>km per week (Monday–Sunday)</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <WeeklyDistanceChart data={weeklyDistance} />
-          </CardContent>
-        </Card>
+      <p className="mt-5 flex items-baseline gap-2">
+        <span className="num-hero text-[56px] font-semibold leading-none">{kmFromMeters(totals.distanceM, 0)}</span>
+        <span className="text-lg text-muted-foreground">km total</span>
+      </p>
+      <dl className="mt-4 grid grid-cols-3 gap-px overflow-hidden rounded-lg bg-line text-center tabular-nums">
+        <div className="bg-surface py-3">
+          <dt className="text-[11px] text-muted-foreground">Ride</dt>
+          <dd className="mt-0.5 font-semibold">{totals.rides}</dd>
+        </div>
+        <div className="bg-surface py-3">
+          <dt className="text-[11px] text-muted-foreground">Naik</dt>
+          <dd className="mt-0.5 font-semibold">{metersRounded(totals.elevationM)} m</dd>
+        </div>
+        <div className="bg-surface py-3">
+          <dt className="text-[11px] text-muted-foreground">Waktu gowes</dt>
+          <dd className="mt-0.5 font-semibold">{durationFromSeconds(totals.movingTimeS)}</dd>
+        </div>
+      </dl>
 
-        {/* Speed progression */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <Zap className="size-4 text-pine" aria-hidden />
-              <CardTitle>Speed progression</CardTitle>
-            </div>
-            <CardDescription>Average speed per ride (km/h)</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <SpeedProgressionChart data={speedProgression} />
-          </CardContent>
-        </Card>
-
-        {/* Cumulative elevation */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <Mountain className="size-4 text-muted-foreground" aria-hidden />
-              <CardTitle>Cumulative elevation</CardTitle>
-            </div>
-            <CardDescription>Total meters climbed over all rides</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <CumulativeElevationChart data={cumulativeElevation} />
-          </CardContent>
-        </Card>
-
-        {/* Auto-detected PRs */}
-        <section>
-          <div className="mb-3 flex items-center gap-2">
-            <Trophy className="size-4 text-pine" aria-hidden />
-            <span className="font-heading text-base font-medium">Personal records</span>
-          </div>
-
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <Card>
-              <CardHeader>
-                <CardTitle>Longest ride</CardTitle>
-                {longestRide ? (
-                  <CardDescription>
-                    {longestRide.name} ·{" "}
-                    {longestRide.startLocal.toLocaleDateString("en-GB", {
-                      timeZone: "UTC",
-                      day: "2-digit",
-                      month: "short",
-                    })}
-                  </CardDescription>
-                ) : null}
-              </CardHeader>
-              <CardContent>
-                {longestRide ? (
-                  <MetricReadout
-                    label="Distance"
-                    value={kmFromMeters(longestRide.distanceM)}
-                    unit="km"
-                    size="md"
-                    accent
-                  />
-                ) : (
-                  <span className="text-sm text-muted-foreground">No data yet</span>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Fastest ride</CardTitle>
-                {fastestRide ? (
-                  <CardDescription>
-                    {fastestRide.name} ·{" "}
-                    {fastestRide.startLocal.toLocaleDateString("en-GB", {
-                      timeZone: "UTC",
-                      day: "2-digit",
-                      month: "short",
-                    })}
-                  </CardDescription>
-                ) : null}
-              </CardHeader>
-              <CardContent>
-                {fastestRide ? (
-                  <MetricReadout
-                    label="Avg speed"
-                    value={kmhFromMs(fastestRide.avgSpeedMs)}
-                    unit="km/h"
-                    size="md"
-                    accent
-                  />
-                ) : (
-                  <span className="text-sm text-muted-foreground">No data yet</span>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Biggest climb</CardTitle>
-                {biggestClimb ? (
-                  <CardDescription>
-                    {biggestClimb.name} ·{" "}
-                    {biggestClimb.startLocal.toLocaleDateString("en-GB", {
-                      timeZone: "UTC",
-                      day: "2-digit",
-                      month: "short",
-                    })}
-                  </CardDescription>
-                ) : null}
-              </CardHeader>
-              <CardContent>
-                {biggestClimb ? (
-                  <MetricReadout
-                    label="Elevation"
-                    value={metersRounded(biggestClimb.elevationGainM)}
-                    unit="m"
-                    size="md"
-                    accent
-                  />
-                ) : (
-                  <span className="text-sm text-muted-foreground">No data yet</span>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </section>
+      <SectionTitle title="Rekor lo" />
+      <div className="rounded-lg bg-surface px-4">
+        {prs.longest ? (
+          <RecordRow label="Paling jauh" ride={prs.longest} value={kmFromMeters(prs.longest.distanceM)} unit="km" />
+        ) : null}
+        {prs.fastest ? (
+          <RecordRow label="Rata-rata paling cepat" ride={prs.fastest} value={kmhFromMs(prs.fastest.avgSpeedMs)} unit="km/j" />
+        ) : null}
+        {prs.biggestClimb ? (
+          <RecordRow label="Tanjakan terbanyak" ride={prs.biggestClimb} value={metersRounded(prs.biggestClimb.elevationGainM)} unit="m" />
+        ) : null}
       </div>
+
+      <SectionTitle title="Jarak per minggu" aside="12 minggu terakhir" />
+      <div className="rounded-lg bg-surface px-3 pb-3 pt-4">
+        <WeekChart weeks={planner.weeks.slice(-12)} showSafety={false} height={110} />
+      </div>
+
+      {speedPoints.length >= 2 ? (
+        <>
+          <SectionTitle title="Makin cepat nggak?" aside={`${speedPoints.length} ride terakhir ≥ 3 km`} />
+          <div className="rounded-lg bg-surface p-4">
+            {speed ? (
+              <p className="mb-3 text-[15px] leading-6">
+                {Math.abs(speed.deltaKmh) < 0.5 ? "Stabil." : speed.deltaKmh > 0 ? "Iya." : "Belum."}{" "}
+                <span className="text-muted-foreground">5 ride terakhir rata-rata</span>{" "}
+                <span className="font-semibold tabular-nums">{fmtNum(speed.recentKmh)} km/j</span>
+                <span className="text-muted-foreground">, 5 ride sebelumnya</span>{" "}
+                <span className="font-semibold tabular-nums">{fmtNum(speed.previousKmh)} km/j</span>{" "}
+                <span className={cn("tabular-nums", speed.deltaKmh < 0 ? "text-caution" : "text-ok")}>
+                  ({speed.deltaKmh > 0 ? "+" : "−"}
+                  {fmtNum(Math.abs(speed.deltaKmh))})
+                </span>
+                .
+              </p>
+            ) : (
+              <p className="mb-3 text-[15px] leading-6 text-muted-foreground">
+                Butuh 10 ride di atas 3 km buat bandingin tren kecepatan.
+              </p>
+            )}
+            <SpeedChart points={speedPoints} avgKmh={avgKmh} />
+            <div className="mt-2 flex justify-between text-xs tabular-nums text-muted-foreground">
+              <span>{localDateLabel(speedPoints[0].startLocal)}</span>
+              <span>rata-rata {fmtNum(avgKmh)} km/j</span>
+              <span>{localDateLabel(speedPoints[speedPoints.length - 1].startLocal)}</span>
+            </div>
+          </div>
+        </>
+      ) : null}
     </AppShell>
   );
 }

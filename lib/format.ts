@@ -1,33 +1,37 @@
 /**
- * Display-layer unit conversion & formatting.
+ * Display-layer unit conversion & formatting (Indonesian locale).
  * Storage is raw metric (meters, m/s, seconds) — convert ONLY here.
  */
 
-export function kmFromMeters(meters: number, digits = 1): string {
-  return (meters / 1000).toLocaleString("en-US", {
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+const WEEKDAYS = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
+
+/** 74.3 → "74,3". */
+export function fmtNum(value: number, digits = 1): string {
+  return value.toLocaleString("id-ID", {
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
   });
+}
+
+export function kmFromMeters(meters: number, digits = 1): string {
+  return fmtNum(meters / 1000, digits);
 }
 
 export function kmhFromMs(ms: number, digits = 1): string {
-  return (ms * 3.6).toLocaleString("en-US", {
-    minimumFractionDigits: digits,
-    maximumFractionDigits: digits,
-  });
+  return fmtNum(ms * 3.6, digits);
 }
 
 export function metersRounded(meters: number): string {
-  return Math.round(meters).toLocaleString("en-US");
+  return Math.round(meters).toLocaleString("id-ID");
 }
 
-/** Seconds → "9h 12m" / "45m" / "0m". */
+/** Seconds → "3 j 51 m" / "45 m". */
 export function durationFromSeconds(seconds: number): string {
   const total = Math.max(0, Math.round(seconds / 60));
   const h = Math.floor(total / 60);
   const m = total % 60;
-  if (h === 0) return `${m}m`;
-  return `${h}h ${m.toString().padStart(2, "0")}m`;
+  return h === 0 ? `${m} m` : `${h} j ${m} m`;
 }
 
 /**
@@ -35,32 +39,36 @@ export function durationFromSeconds(seconds: number): string {
  * wall-clock as a UTC instant, so UTC getters yield the local calendar values.
  */
 export function localDateLabel(d: Date): string {
-  return d.toLocaleDateString("en-GB", {
-    timeZone: "UTC",
-    day: "2-digit",
-    month: "short",
-  });
+  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
 }
 
 export function localTimeLabel(d: Date): string {
-  return d.toLocaleTimeString("en-GB", {
-    timeZone: "UTC",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
 }
 
-/** "Today · 06:14" / "Mon 16 Jun · 16:13" relative to rider-local now. */
-export function relativeWhen(d: Date, todayIndex: number): string {
-  const idx = localDayIndex(d);
-  const time = localTimeLabel(d);
-  if (idx === todayIndex) return `Today · ${time}`;
-  if (idx === todayIndex - 1) return `Yesterday · ${time}`;
-  const weekday = d.toLocaleDateString("en-GB", {
-    timeZone: "UTC",
-    weekday: "short",
-  });
-  return `${weekday} ${localDateLabel(d)} · ${time}`;
+export function weekdayLabel(d: Date): string {
+  return WEEKDAYS[d.getUTCDay()];
+}
+
+/** Day index → Date at that local midnight. */
+export function dateFromDayIndex(dayIndex: number): Date {
+  return new Date(dayIndex * 86_400_000);
+}
+
+/** Monday day index → "19–25 Okt" or "29 Sep – 5 Okt". */
+export function weekRangeLabel(mondayDayIndex: number): string {
+  const a = dateFromDayIndex(mondayDayIndex);
+  const b = dateFromDayIndex(mondayDayIndex + 6);
+  return a.getUTCMonth() === b.getUTCMonth()
+    ? `${a.getUTCDate()}–${b.getUTCDate()} ${MONTHS[b.getUTCMonth()]}`
+    : `${localDateLabel(a)} – ${localDateLabel(b)}`;
+}
+
+/** "hari ini" / "kemarin" / "3 hari lalu". */
+export function daysAgoLabel(days: number): string {
+  if (days <= 0) return "hari ini";
+  if (days === 1) return "kemarin";
+  return `${days} hari lalu`;
 }
 
 /** Days since epoch using the local-wall-clock convention (UTC parts). */

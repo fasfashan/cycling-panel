@@ -4,6 +4,20 @@ import { getDb } from "@/lib/db";
 import { gear, maintenance } from "@/lib/db/schema";
 import type { Gear, Maintenance } from "@/lib/db/schema";
 
+// Task keys are stored in English (seeded defaults); the UI speaks Indonesian.
+const TASK_LABELS: Record<string, string> = {
+  "Chain lube": "Lumasi rantai",
+  "Drivetrain clean": "Bersihkan drivetrain",
+  "Tire pressure check": "Cek tekanan ban",
+  "Chain wear check": "Cek keausan rantai",
+  "Brake pad check": "Cek kampas rem",
+  "Full service": "Servis total",
+};
+
+export function taskLabel(task: string): string {
+  return TASK_LABELS[task] ?? task;
+}
+
 export type MaintenanceWithStatus = Maintenance & {
   kmSinceService: number;
   kmUntilNext: number;
