@@ -14,6 +14,7 @@ import type { CoachStatus } from "@/lib/coach/rules";
 import { daysAgoLabel, dateFromDayIndex, fmtNum, localDateLabel, weekdayLabel } from "@/lib/format";
 import { getGearWithMaintenance, taskLabel } from "@/lib/stats/gear";
 import { JUMP_WARN, todayIndex } from "@/lib/stats/planner";
+import { getRecordBook } from "@/lib/stats/records";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +26,7 @@ const STATUS: Record<CoachStatus, { label: string; text: string; dot: string }> 
 };
 
 export default async function TodayPage() {
-  const [today, gears] = await Promise.all([getToday(), getGearWithMaintenance()]);
+  const [today, gears, book] = await Promise.all([getToday(), getGearWithMaintenance(), getRecordBook()]);
 
   if (!today) {
     return (
@@ -234,7 +235,7 @@ export default async function TodayPage() {
       {facts.lastRide ? (
         <>
           <SectionTitle title="Ride terakhir" />
-          <RideRow ride={facts.lastRide} card />
+          <RideRow ride={facts.lastRide} card prCount={book.byRide.get(facts.lastRide.id)?.length ?? 0} />
         </>
       ) : null}
     </AppShell>

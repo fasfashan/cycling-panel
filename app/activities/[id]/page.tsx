@@ -4,7 +4,8 @@ import { notFound } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { CassetteMeter, SectionTitle } from "@/components/panel";
 import { getActivityById } from "@/lib/stats/activities";
-import { effortTime, ridePrs, stickerUrl } from "@/lib/stats/prs";
+import { getRecordBook, stickerFilename, stickerUrl } from "@/lib/stats/records";
+import type { RideRecord } from "@/lib/stats/records";
 import { getActivityPhotos, photoUrl } from "@/lib/strava/photos";
 import {
   durationFromSeconds,
@@ -20,6 +21,10 @@ import {
 export const dynamic = "force-dynamic";
 
 type Params = { id: string };
+
+function recordValue(rec: RideRecord, value: number): string {
+  return rec.kind === "elevation" ? metersRounded(value) : fmtNum(value);
+}
 
 function Stat({ label, value, unit }: { label: string; value: string; unit?: string }) {
   return (
@@ -42,9 +47,9 @@ export default async function RideDetailPage({ params }: { params: Promise<Param
   if (!ride) notFound();
 
   // Photos can be added after the first sync, so always ask Strava.
-  const photos = await getActivityPhotos(idNum, 2000);
+  const [photos, book] = await Promise.all([getActivityPhotos(idNum, 2000), getRecordBook()]);
   const stoppedS = ride.elapsedTimeS - ride.movingTimeS;
-  const prs = ridePrs(ride);
+  const records = book.byRide.get(ride.id) ?? [];
 
   return (
     <AppShell>
@@ -99,59 +104,60 @@ export default async function RideDetailPage({ params }: { params: Promise<Param
         )}
       </section>
 
-      {prs.length > 0 ? (
+      {records.length > 0 ? (
         <section aria-label="PR di ride ini">
-          <SectionTitle title="PR di ride ini" aside={`${prs.length} segmen`} />
+          <SectionTitle title="PR di ride ini" aside={`${records.length} rekor`} />
           <p className="-mt-1 mb-3 text-sm text-muted-foreground">
             Stiker PNG transparan, tinggal tempel di story. Pakai versi kartu kalau fotonya terang.
           </p>
           <ul className="space-y-2">
-            {prs.map((pr) => (
-              <li key={pr.index} className="rounded-lg bg-surface p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <p className="min-w-0 text-[15px] font-medium leading-snug">{pr.segmentName}</p>
-                  <p className="shrink-0 font-heading text-xl font-semibold tabular-nums text-brand">
-                    {effortTime(pr.elapsedS)}
-                  </p>
-                </div>
-                <p className="mt-0.5 text-xs tabular-nums text-muted-foreground">
-                  {kmFromMeters(pr.distanceM, 2)} km · {fmtNum(pr.avgKmh)} km/j · grade{" "}
-                  {pr.gradePct < 0 ? "−" : ""}
-                  {fmtNum(Math.abs(pr.gradePct))}%
+            {records.map((rec) => (
+              <li key={rec.kind} className="rounded-lg bg-surface p-4">
+                <p className="text-sm text-muted-foreground">{rec.title}</p>
+                <p className="mt-1 flex items-baseline gap-1.5">
+                  <span className="num-hero text-3xl font-semibold text-brand">{recordValue(rec, rec.value)}</span>
+                  <span className="text-sm text-muted-foreground">{rec.unit}</span>
+                </p>
+                <p className="mt-1 text-xs tabular-nums text-muted-foreground">
+                  Rekor sebelumnya {recordValue(rec, rec.previous.value)} {rec.unit} ·{" "}
+                  <Link href={`/activities/${rec.previous.ride.id}`} className="underline underline-offset-2 hover:text-foreground">
+                    {rec.previous.ride.name}
+                  </Link>
+                  , {localDateLabel(rec.previous.ride.startLocal)}
                 </p>
                 <div className="mt-3 grid grid-cols-2 gap-2">
                   <a
-                    href={stickerUrl(pr, { download: true })}
-                    download
+                    href={stickerUrl(rec, { download: true })}
+                    download={stickerFilename(rec.ride.id, rec.kind)}
                     className="flex h-11 items-center justify-center rounded-md bg-brand text-sm font-semibold text-background"
                   >
                     Unduh stiker
                   </a>
                   <a
-                    href={stickerUrl(pr, { panel: true, download: true })}
-                    download
+                    href={stickerUrl(rec, { panel: true, download: true })}
+                    download={stickerFilename(rec.ride.id, rec.kind, true)}
                     className="flex h-11 items-center justify-center rounded-md border border-line text-sm font-medium hover:bg-raised"
                   >
                     Versi kartu
                   </a>
                 </div>
-                <details className="group mt-2">
-                  <summary className="flex min-h-11 cursor-pointer list-none items-center gap-1 text-sm text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden">
+                <details className="mt-2">
+                  <summary className="flex min-h-11 cursor-pointer list-none items-center text-sm text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden">
                     Lihat pratinjau
                   </summary>
                   {/* loading="lazy" inside a closed <details> defers rendering the PNGs until opened. */}
                   <div className="mt-2 grid grid-cols-2 gap-2">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={stickerUrl(pr)}
-                      alt={`Stiker PR ${pr.segmentName}`}
+                      src={stickerUrl(rec)}
+                      alt={`Stiker ${rec.title}`}
                       loading="lazy"
                       className="w-full rounded-md bg-[conic-gradient(#2a2a2d_25%,#1f1f22_0_50%,#2a2a2d_0_75%,#1f1f22_0)] bg-[length:16px_16px]"
                     />
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={stickerUrl(pr, { panel: true })}
-                      alt={`Stiker PR ${pr.segmentName}, versi kartu`}
+                      src={stickerUrl(rec, { panel: true })}
+                      alt={`Stiker ${rec.title}, versi kartu`}
                       loading="lazy"
                       className="w-full rounded-md bg-[conic-gradient(#2a2a2d_25%,#1f1f22_0_50%,#2a2a2d_0_75%,#1f1f22_0)] bg-[length:16px_16px]"
                     />

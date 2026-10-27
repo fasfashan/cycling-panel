@@ -17,20 +17,10 @@ export type ProgressData = {
   hasData: boolean;
   firstRide: Activity | null;
   totals: { distanceM: number; rides: number; elevationM: number; movingTimeS: number };
-  prs: {
-    longest: Activity | null;
-    /** Fastest avg speed among rides >= 3 km, so errands don't win. */
-    fastest: Activity | null;
-    biggestClimb: Activity | null;
-  };
   /** Most recent meaningful rides, oldest first. */
   speedPoints: Activity[];
   speed: SpeedTrend | null;
 };
-
-function maxBy(rides: Activity[], key: (a: Activity) => number): Activity | null {
-  return rides.reduce<Activity | null>((best, a) => (!best || key(a) > key(best) ? a : best), null);
-}
 
 export async function getProgressData(): Promise<ProgressData> {
   const db = getDb();
@@ -56,11 +46,6 @@ export async function getProgressData(): Promise<ProgressData> {
     hasData: rides.length > 0,
     firstRide: rides[0] ?? null,
     totals,
-    prs: {
-      longest: maxBy(rides, (a) => a.distanceM),
-      fastest: maxBy(meaningful, (a) => a.avgSpeedMs),
-      biggestClimb: maxBy(rides, (a) => a.elevationGainM),
-    },
     speedPoints: meaningful.slice(-SPEED_POINTS),
     speed: speedTrend(rides),
   };

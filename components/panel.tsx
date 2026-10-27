@@ -137,7 +137,8 @@ export function WeekChartLegend() {
   );
 }
 
-export function RideRow({ ride, card = false }: { ride: Activity; card?: boolean }) {
+/** `prCount`: ride-level records this ride set (lib/stats/records), not Strava segment PRs. */
+export function RideRow({ ride, card = false, prCount = 0 }: { ride: Activity; card?: boolean; prCount?: number }) {
   return (
     <Link
       href={`/activities/${ride.id}`}
@@ -151,7 +152,7 @@ export function RideRow({ ride, card = false }: { ride: Activity; card?: boolean
         <span className="mt-0.5 block text-xs tabular-nums text-muted-foreground">
           {weekdayLabel(ride.startLocal)} {localDateLabel(ride.startLocal)} · {durationFromSeconds(ride.movingTimeS)} ·{" "}
           {metersRounded(ride.elevationGainM)} m naik
-          {ride.prCount > 0 ? <span className="text-brand"> · {ride.prCount} PR</span> : null}
+          {prCount > 0 ? <span className="text-brand"> · {prCount} PR</span> : null}
         </span>
       </span>
       <span className="shrink-0 text-right">

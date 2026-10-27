@@ -7,11 +7,11 @@ import {
   durationFromSeconds,
   fmtNum,
   kmFromMeters,
-  kmhFromMs,
   localDateLabel,
   metersRounded,
 } from "@/lib/format";
 import { getPlannerData } from "@/lib/stats/planner";
+import { getRecordBook } from "@/lib/stats/records";
 import { getProgressData } from "@/lib/stats/trends";
 import { cn } from "@/lib/utils";
 
@@ -80,7 +80,7 @@ function SpeedChart({ points, avgKmh }: { points: Activity[]; avgKmh: number }) 
 }
 
 export default async function ProgressPage() {
-  const [data, planner] = await Promise.all([getProgressData(), getPlannerData()]);
+  const [data, planner, book] = await Promise.all([getProgressData(), getPlannerData(), getRecordBook()]);
 
   if (!data.hasData || !data.firstRide) {
     return (
@@ -90,7 +90,7 @@ export default async function ProgressPage() {
     );
   }
 
-  const { totals, prs, speedPoints, speed } = data;
+  const { totals, speedPoints, speed } = data;
   const avgKmh = speedPoints.reduce((s, p) => s + p.avgSpeedMs * 3.6, 0) / Math.max(1, speedPoints.length);
 
   return (
@@ -119,15 +119,15 @@ export default async function ProgressPage() {
 
       <SectionTitle title="Rekor lo" />
       <div className="rounded-lg bg-surface px-4">
-        {prs.longest ? (
-          <RecordRow label="Paling jauh" ride={prs.longest} value={kmFromMeters(prs.longest.distanceM)} unit="km" />
-        ) : null}
-        {prs.fastest ? (
-          <RecordRow label="Rata-rata paling cepat" ride={prs.fastest} value={kmhFromMs(prs.fastest.avgSpeedMs)} unit="km/j" />
-        ) : null}
-        {prs.biggestClimb ? (
-          <RecordRow label="Tanjakan terbanyak" ride={prs.biggestClimb} value={metersRounded(prs.biggestClimb.elevationGainM)} unit="m" />
-        ) : null}
+        {book.current.map((r) => (
+          <RecordRow
+            key={r.title}
+            label={r.title}
+            ride={r.ride}
+            value={r.kind === "elevation" ? metersRounded(r.value) : fmtNum(r.value)}
+            unit={r.unit}
+          />
+        ))}
       </div>
 
       <SectionTitle title="Jarak per minggu" aside="12 minggu terakhir" />

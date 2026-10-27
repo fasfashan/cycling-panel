@@ -142,7 +142,7 @@ so this feature protects against overreach.
 ## 6. Out of Scope (Phase 2+) — do NOT build in MVP
 
 - **Any LLM / AI API** (Gemini was removed). Coaching stays rule-based.
-- Maps / route heatmap from polylines (the route line on PR stickers is the only exception).
+- Maps / route heatmap from polylines.
 - Weather correlation (Bogor rain context).
 - Goals/milestones gamification + badges.
 - Any multi-user / public-profile features. Downloadable PR stickers are the only sharing.
@@ -185,19 +185,24 @@ Convert at the display layer; store raw metric values.
 - Strava sends no webhook when only RPE is edited, so each sync re-fetches the detail
   of recent rides with empty RPE (and rows missing a detail payload), capped per run.
 
-### Segment PRs and stickers
-- PRs come from `segment_efforts[].pr_rank === 1` in the stored **detail** payload
-  (`lib/stats/prs.ts`). Rides that only have the summary payload show no PRs until
-  the sync re-fetches their detail.
-- Effort ids exceed 2^53 and are already rounded by `JSON.parse` at sync time. Never
-  key on them: a PR is addressed as ride id + index in `segment_efforts`.
-- `/api/share/pr/[rideId]/[index]` renders a transparent 1080px PNG with `next/og`
-  (`?v=panel` for the dark-card variant, `?download=1` for an attachment). The
-  segment is highlighted on `map.summary_polyline` by snapping its start/end
-  coordinates (`lib/polyline.ts`), choosing the forward pair whose length best matches
-  the segment so out-and-back rides highlight the right leg.
+### Personal records and stickers
+- PRs are **ride-level**, computed by us (`lib/stats/records.ts`), not Strava segment
+  PRs: longest ride, most elevation, and fastest avg speed per distance bracket
+  (10–20, 20–40, 40–80, 80+ km). A ride earns a PR when it beat every earlier ride in
+  that category; the first ride in a category earns nothing. A ride keeps its PR after
+  it's beaten later.
+- `/api/share/pr/[rideId]/[kind]` (`kind`: distance | elevation | speed) renders a
+  transparent 1080px PNG with `next/og`, laid out like Strava's PR sticker but in our
+  tokens: an orange PR badge with burst lines, the record title, the value as hero, and
+  "+X dari rekor sebelumnya". Only the record itself; no other ride stats, route, ride
+  name, wordmark, or date (owner's call). `?v=panel` is the dark-card variant for bright
+  photos, `?download=1` serves an attachment.
+- The sticker hero uses Space Grotesk Bold, not mono: a mono comma takes a full cell and
+  splits decimals like "21,5".
 - Satori quirks: no `undefined` style values, wrapped text needs an explicit width, and
   render inside try/catch (`.arrayBuffer()`) so failures return a 500.
+- Strava segment effort ids exceed 2^53 and are rounded by `JSON.parse` at sync time;
+  never key on them if segment data is used again.
 
 ### No HR / power / cadence
 Those fields will be **null/absent**. Do **not** build features that depend on

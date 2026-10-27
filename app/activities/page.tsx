@@ -4,11 +4,12 @@ import type { Activity } from "@/lib/db/schema";
 import { getAllActivities } from "@/lib/stats/activities";
 import { kmFromMeters, localDateLabel, weekRangeLabel } from "@/lib/format";
 import { mondayOf } from "@/lib/stats/planner";
+import { getRecordBook } from "@/lib/stats/records";
 
 export const dynamic = "force-dynamic";
 
 export default async function RidesPage() {
-  const rides = await getAllActivities(); // newest first
+  const [rides, book] = await Promise.all([getAllActivities(), getRecordBook()]); // rides newest first
 
   if (rides.length === 0) {
     return (
@@ -48,7 +49,7 @@ export default async function RidesPage() {
             </span>
           </div>
           {list.map((r) => (
-            <RideRow key={r.id} ride={r} />
+            <RideRow key={r.id} ride={r} prCount={book.byRide.get(r.id)?.length ?? 0} />
           ))}
         </section>
       ))}
